@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>별먼지 정원</title>
+  </head>
+  <body>
+    <canvas id="scene-canvas" aria-label="3D 별먼지 정원"></canvas>
+
+    <main id="app-shell" aria-label="별먼지 정원 제어판">
+      <section class="control-panel" aria-label="새 별 심기">
+        <header class="brand">
+          <p class="eyebrow">SQLite x Three.js</p>
+          <h1>별먼지 정원</h1>
+        </header>
+
+        <dl class="stats">
+          <div>
+            <dt>별</dt>
+            <dd id="stat-count">0</dd>
+          </div>
+          <div>
+            <dt>반짝임</dt>
+            <dd id="stat-sparks">0</dd>
+          </div>
+          <div>
+            <dt>평균 광도</dt>
+            <dd id="stat-brightness">0.0</dd>
+          </div>
+        </dl>
+
+        <form id="star-form" class="star-form">
+          <label class="field">
+            <span>별 이름</span>
+            <input id="star-name" name="name" maxlength="24" autocomplete="off" required placeholder="예: 화요일의 커피" />
+          </label>
+
+          <fieldset class="field mood-field">
+            <legend>기분 궤도</legend>
+            <label><input type="radio" name="mood" value="curious" checked /> 탐험</label>
+            <label><input type="radio" name="mood" value="calm" /> 고요</label>
+            <label><input type="radio" name="mood" value="bold" /> 대담</label>
+            <label><input type="radio" name="mood" value="lucky" /> 행운</label>
+          </fieldset>
+
+          <div class="field">
+            <span>별빛 색</span>
+            <div class="swatches" role="radiogroup" aria-label="별빛 색">
+              <button type="button" class="swatch selected" data-color="#ff6b5f" aria-label="산호색"></button>
+              <button type="button" class="swatch" data-color="#ffd166" aria-label="금색"></button>
+              <button type="button" class="swatch" data-color="#4ecdc4" aria-label="청록색"></button>
+              <button type="button" class="swatch" data-color="#91c7ff" aria-label="하늘색"></button>
+              <button type="button" class="swatch" data-color="#f7a1d7" aria-label="분홍색"></button>
+            </div>
+          </div>
+
+          <label class="field">
+            <span>광도 <strong id="brightness-value">1.4</strong></span>
+            <input id="star-brightness" name="brightness" type="range" min="0.8" max="2.4" step="0.1" value="1.4" />
+          </label>
+
+          <label class="field">
+            <span>짧은 기록</span>
+            <textarea id="star-note" name="note" maxlength="120" rows="3" placeholder="오늘의 작은 장면"></textarea>
+          </label>
+
+          <button class="primary-action" type="submit">별 심기</button>
+        </form>
+
+        <div class="toolbar" aria-label="정원 도구">
+          <button id="orbit-toggle" type="button">궤도 정지</button>
+          <button id="camera-reset" type="button">시야 초기화</button>
+        </div>
+      </section>
+
+      <section class="detail-panel" aria-label="선택한 별">
+        <div id="empty-detail" class="empty-detail">
+          <p>별을 선택하세요</p>
+        </div>
+        <article id="star-detail" class="star-detail hidden"></article>
+        <div id="star-list" class="star-list" aria-label="저장된 별"></div>
+      </section>
+    </main>
+
+    <p id="toast" class="toast" role="status" aria-live="polite"></p>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
