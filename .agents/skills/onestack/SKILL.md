@@ -21,7 +21,12 @@ http://211.47.74.86:3000
 - Prefer `dokploy ... --json` and parse the result instead of relying on formatted text.
 - Never print API tokens, database passwords, `.env` values, or full secret-bearing command lines in the final response.
 - Do not delete applications, databases, domains, volumes, or deployments without explicit user approval.
-- Before deploying, inspect git status. Dokploy deploys from remote sources; uncommitted or unpushed local changes usually are not deployed.
+- Prefer Docker Compose deployment. Use static only for pure frontend builds with no API/server behavior.
+- Do not depend on GitHub/GitLab/Bitbucket/Gitea providers unless the user explicitly says that provider is available.
+- For Git-provider-disabled deployments, build and push a Docker image, render a raw compose file that references that image, then deploy the raw compose.
+- Register the domain before queueing the deploy so Traefik labels are present on the created container. If a domain is added after a successful deploy, redeploy the compose.
+- Default public domains must use `*.onestack.run`, usually `<app-slug>.onestack.run`. Do not use `*.traefik.me` except as an explicit temporary diagnostic fallback.
+- Before git-backed deployments, inspect git status. Git-backed Dokploy deploys from remote sources; uncommitted or unpushed local changes usually are not deployed.
 - If authentication is missing, ask for a Dokploy API key or tell the user how to create one in the console. Do not invent credentials.
 
 ## Fast Start
@@ -48,23 +53,70 @@ sed -n '1,220p' .agents/skills/onestack/references/dokploy-cli.md
 ## Deployment Workflow
 
 1. Analyze the local project with `inspect_project.mjs`.
-2. Confirm the remote source:
-   - Require a usable git remote and branch for application or compose deployments.
-   - If there are uncommitted changes, ask whether to commit/push before deploying.
-   - If there are unpushed commits, push them or confirm they are intentionally excluded.
-3. Authenticate with `bootstrap_dokploy.sh`.
+2. Authenticate with `bootstrap_dokploy.sh`.
+3. Choose the deployment mode:
+   - Use existing `docker-compose.yml`/`compose.yml` first when present.
+   - If a `Dockerfile` exists and git providers are unavailable, build and push an image, then deploy a raw compose file using that image.
+   - Use static only when the app is a pure frontend with no API routes, server framework, SQLite, database, or runtime persistence.
+   - Use application/nixpacks only when compose/static are a poor fit or the user asks for it.
 4. Discover or create the Dokploy project and environment:
    - Use `dokploy project search --name <name> --json`.
    - Use `dokploy project create --name <name> --json` only when no suitable project exists.
    - Use `dokploy environment search --projectId <id> --name production --json`, then create it if needed.
-5. Choose the Dokploy resource type:
-   - Use `compose` when a root `docker-compose.yml`, `docker-compose.yaml`, `compose.yml`, or `compose.yaml` exists.
-   - Use `application` with `buildType=dockerfile` when a `Dockerfile` exists.
-   - Use `application` with `buildType=static` for Vite/SPA builds with a publish directory such as `dist`.
-   - Use `application` with `buildType=nixpacks` or `railpack` for common Node/Python apps without a Dockerfile.
-6. Configure source, build type, environment variables, ports, and domains.
-7. Deploy with `dokploy application deploy --applicationId <id> --json` or `dokploy compose deploy --composeId <id> --json`.
-8. Verify with `dokploy application one`, `dokploy compose one`, and `dokploy deployment all-by-type`.
+5. Configure raw compose, environment variables, volumes, and domain:
+   - Use `expose` plus a Dokploy domain route instead of relying on externally reachable host ports.
+   - Register `<app-slug>.onestack.run` with `domainType=compose`, `serviceName=<compose service>`, and the app's internal port.
+6. Deploy with `dokploy compose deploy --composeId <id> --json`.
+7. Wait for the queue and verify:
+   - `dokploy deployment queue-list --json`
+   - `dokploy project all --json` and inspect `composeStatus`.
+   - `curl http://<app-slug>.onestack.run/` and any health endpoint.
+
+## Raw Image Compose Path
+
+Use this path when git providers are unavailable or unreliable.
+
+1. Build and push a Linux image to a registry the Dokploy host can pull. For temporary deployments, `ttl.sh/<name>:24h` works but expires; use a durable registry for production.
+
+```bash
+TAG="ttl.sh/<app-slug>-$(date +%s):24h"
+docker buildx build --builder desktop-linux --platform linux/amd64 -t "$TAG" --push .
+```
+
+If a custom `buildx` builder fails with CA/TLS errors, try the Docker Desktop/default builder. Confirm the image exists with `docker buildx imagetools inspect "$TAG"`.
+
+2. Render raw compose from the image:
+
+```bash
+node .agents/skills/onestack/scripts/render_image_compose.mjs \
+  --image "$TAG" \
+  --service "<service-name>" \
+  --port 3000 \
+  --health-path /api/health \
+  --volume "<app-slug>-data:/app/data" \
+  --output /tmp/<app-slug>.compose.yml
+```
+
+3. Create/update Dokploy resources, register `<app-slug>.onestack.run`, deploy, and wait:
+
+```bash
+node .agents/skills/onestack/scripts/deploy_raw_compose.mjs \
+  --project "<project-name>" \
+  --app-name "<app-slug>" \
+  --compose-file /tmp/<app-slug>.compose.yml \
+  --service "<service-name>" \
+  --port 3000
+```
+
+The helper uses direct Dokploy TRPC calls for commands where the generated CLI can return misleading `400` errors for GET input wrapping.
+
+## Domain Rules
+
+- Default host: `<app-slug>.onestack.run`.
+- `*.onestack.run` wildcard DNS is already registered for Onestack.
+- Create the domain before deployment. Dokploy injects Traefik labels into the converted compose; running containers do not receive new labels until redeployed.
+- A healthy container with `404 page not found` from the public host usually means Traefik did not match the host. Check `domain.byComposeId`, `compose.getConvertedCompose`, and redeploy after domain registration.
+- Use `certificateType=none` unless HTTPS is explicitly configured for the route; Cloudflare or upstream TLS may still serve HTTPS depending on the wildcard setup.
 
 ## Authentication
 
@@ -85,3 +137,5 @@ Load these only when needed:
 - `references/dokploy-cli.md`: practical Dokploy CLI commands, deployment recipes, and status checks.
 - `scripts/inspect_project.mjs`: local project detector that outputs JSON for deployment planning.
 - `scripts/bootstrap_dokploy.sh`: CLI installer/authenticator/verifier.
+- `scripts/render_image_compose.mjs`: renders image-based raw Docker Compose YAML.
+- `scripts/deploy_raw_compose.mjs`: creates/updates raw compose, registers `<app-slug>.onestack.run`, deploys, and waits for status.

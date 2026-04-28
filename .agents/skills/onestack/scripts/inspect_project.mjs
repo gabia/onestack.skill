@@ -87,6 +87,13 @@ function dockerExposePort(root) {
   }
 }
 
+function redactRemote(remote) {
+  if (!remote) {
+    return remote;
+  }
+  return remote.replace(/^(https?:\/\/)[^/@]+@/i, "$1***@");
+}
+
 function gitInfo(root) {
   const inside = run("git", ["rev-parse", "--is-inside-work-tree"], root) === "true";
   if (!inside) {
@@ -112,7 +119,8 @@ function gitInfo(root) {
   return {
     inside: true,
     branch,
-    remote,
+    remote: redactRemote(remote),
+    remoteHasCredentials: Boolean(remote && /^(https?:\/\/)[^/@]+@/i.test(remote)),
     upstream,
     dirty: Boolean(status),
     statusEntries: status ? status.split("\n").slice(0, 50) : [],
@@ -139,25 +147,27 @@ function inferRecommendation(root, pkg, composeFile) {
   const exposed = dockerExposePort(root);
   if (existsSync(path.join(root, "Dockerfile"))) {
     return {
-      dokployResource: "application",
-      buildType: "dockerfile",
+      dokployResource: "compose",
+      sourceType: "raw-image",
       dockerfile: "Dockerfile",
+      composeType: "docker-compose",
       dockerContextPath: ".",
       portHint: exposed,
-      reason: "Dockerfile detected",
+      reason: "Dockerfile detected; build and push an image, then deploy it with raw Docker Compose",
     };
   }
 
   if (pkg) {
     const frameworks = new Set(pkg.frameworks || []);
-    if (frameworks.has("vite") || frameworks.has("astro") || frameworks.has("vue") || frameworks.has("svelte")) {
+    const hasServer = frameworks.has("express") || frameworks.has("fastify") || frameworks.has("nestjs");
+    if (!hasServer && (frameworks.has("vite") || frameworks.has("astro") || frameworks.has("vue") || frameworks.has("svelte"))) {
       return {
         dokployResource: "application",
         buildType: "static",
         publishDirectory: "dist",
         isStaticSpa: frameworks.has("react") || frameworks.has("vue") || frameworks.has("svelte"),
         portHint: 80,
-        reason: "frontend build tooling detected",
+        reason: "frontend build tooling detected without a server framework",
       };
     }
 

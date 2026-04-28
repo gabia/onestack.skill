@@ -33,6 +33,8 @@ dokploy server all --json
 
 Prefer search before create. Use existing resources when names and ownership match the user's intent.
 
+Some generated CLI GET commands can return `400` even when the API is healthy because the underlying TRPC input wrapper differs by Dokploy version. For compose/domain checks, prefer the helper scripts in `scripts/` or direct TRPC calls when the CLI behaves this way.
+
 ## Project And Environment
 
 Create a project:
@@ -129,6 +131,8 @@ dokploy application deploy \
 
 ## Compose Deployment
 
+Compose is the default deployment path for Onestack. Prefer it over application deployments unless the project is a pure static frontend or the user explicitly asks for another mode.
+
 Create a compose resource:
 
 ```bash
@@ -142,7 +146,46 @@ dokploy compose create \
   --json
 ```
 
-Update source and compose path for git-backed compose deployments:
+### Raw Image Compose
+
+Use raw image compose when git providers are unavailable. Build and push the image first:
+
+```bash
+TAG="ttl.sh/<app-slug>-$(date +%s):24h"
+docker buildx build --builder desktop-linux --platform linux/amd64 -t "$TAG" --push .
+docker buildx imagetools inspect "$TAG"
+```
+
+If a custom buildx builder fails with TLS/CA verification while pulling base images, retry with the Docker Desktop/default builder. If Docker is not running locally, start Docker Desktop before building.
+
+Render an image-only compose file. Prefer `expose` and a Dokploy domain route; host `ports` can be blocked externally or conflict with other services.
+
+```bash
+node .agents/skills/onestack/scripts/render_image_compose.mjs \
+  --image "$TAG" \
+  --service "<service-name>" \
+  --port "<container-port>" \
+  --health-path /api/health \
+  --volume "<app-slug>-data:/app/data" \
+  --output /tmp/<app-slug>.compose.yml
+```
+
+Create/update the raw compose, register the domain, deploy, and wait:
+
+```bash
+node .agents/skills/onestack/scripts/deploy_raw_compose.mjs \
+  --project "<project>" \
+  --app-name "<app-slug>" \
+  --compose-file /tmp/<app-slug>.compose.yml \
+  --service "<service-name>" \
+  --port "<container-port>"
+```
+
+The helper creates `<app-slug>.onestack.run` unless `--host` is supplied. It creates the domain before queueing the deployment so Traefik labels are present on first container creation.
+
+### Git-Backed Compose
+
+Use this only when the user confirms the git provider/source is available. Update source and compose path for git-backed compose deployments:
 
 ```bash
 dokploy compose update \
@@ -159,10 +202,40 @@ Deploy:
 ```bash
 dokploy compose deploy \
   --composeId "<composeId>" \
-  --title "Deploy from agent" \
-  --description "<git branch and commit>" \
+  --title "Deploy raw image compose" \
+  --description "<image tag or source revision>" \
   --json
 ```
+
+## Domain Routing
+
+Default public domains must use the Onestack wildcard:
+
+```bash
+<app-slug>.onestack.run
+```
+
+Create the domain before deploying compose:
+
+```bash
+dokploy domain create \
+  --host "<app-slug>.onestack.run" \
+  --path "/" \
+  --port "<container-port>" \
+  --composeId "<composeId>" \
+  --serviceName "<service-name>" \
+  --domainType compose \
+  --certificateType none \
+  --json
+```
+
+If the domain is added after a successful deployment, redeploy the compose. Dokploy adds Traefik labels to the converted compose, but already-running containers do not receive new labels until they are recreated.
+
+Diagnosis for `404 page not found`:
+
+- If the container is `running` and `healthy`, the app is probably fine.
+- Check `domain.byComposeId` and `compose.getConvertedCompose`; the host should appear in `traefik.http.routers.*.rule`.
+- If the converted compose has the labels but the public host still returns 404, redeploy the compose to recreate the container with the labels.
 
 ## Databases
 
@@ -207,22 +280,25 @@ For failures, check the newest deployment item first, then use targeted commands
 ```bash
 dokploy application read-traefik-config --applicationId "<applicationId>" --json
 dokploy compose get-converted-compose --composeId "<composeId>" --json
+dokploy deployment queue-list --json
+dokploy deployment all-centralized --json
 ```
 
 ## Local Project Readiness Checklist
 
 Before deploy:
 
-- Confirm `git remote get-url origin` points to the intended repository.
-- Confirm `git branch --show-current` matches the deploy branch.
-- Confirm `git status --porcelain` is clean, or explicitly handle local changes.
-- Confirm commits are pushed to the remote branch.
+- Prefer compose. Use static only for frontend-only projects with no server/API/persistence.
+- Confirm the Docker image is pushed to a registry the Dokploy host can pull.
+- Confirm compose uses the correct internal service port.
+- Confirm the Dokploy domain is `<app-slug>.onestack.run`.
 - Confirm required env vars are present in Dokploy, not just in local `.env`.
 - Confirm the app exposes the port used by the Dokploy domain route.
 
 After deploy:
 
 - Read the deploy command JSON response and save the resource ID in notes for the final response.
-- Query the application or compose resource again.
-- Query deployment history and summarize the newest status.
-- Provide the console URL and any public domain URL that was configured.
+- Poll `dokploy deployment queue-list --json` until the deployment is no longer queued.
+- Query `dokploy project all --json` and confirm `composeStatus` is `done`.
+- Curl `http://<app-slug>.onestack.run/` and a health endpoint if one exists.
+- If a domain was created after deployment, redeploy before final verification.
