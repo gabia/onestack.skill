@@ -89,7 +89,7 @@ function readAuth() {
     // Fall through to the explicit error below.
   }
 
-  throw new Error("Dokploy auth is missing. Run bootstrap_dokploy.sh or set DOKPLOY_URL and DOKPLOY_API_KEY.");
+  throw new Error("Dokploy auth is missing. Run bootstrap_dokploy.sh --require-auth or set DOKPLOY_URL and DOKPLOY_API_KEY.");
 }
 
 async function request(method, endpoint, payload) {

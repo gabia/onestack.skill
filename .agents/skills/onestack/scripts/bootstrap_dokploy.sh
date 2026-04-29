@@ -6,13 +6,17 @@ URL="${DOKPLOY_URL:-$DEFAULT_URL}"
 TOKEN="${DOKPLOY_API_KEY:-${DOKPLOY_AUTH_TOKEN:-}}"
 INSTALL_MODE="auto"
 VERIFY="1"
+REQUIRE_AUTH="0"
 
 usage() {
   cat <<'EOF'
-Usage: bootstrap_dokploy.sh [--url URL] [--token TOKEN] [--install auto|always|never] [--no-verify]
+Usage: bootstrap_dokploy.sh [--url URL] [--token TOKEN] [--install auto|always|never] [--require-auth] [--no-verify]
 
 Installs/verifies the Dokploy CLI, authenticates when a token is supplied, and
 checks that the CLI can talk to the Dokploy server.
+
+Use --require-auth before remote Dokploy lookups or deployments. It fails early
+when neither an API key nor a persisted Dokploy CLI auth config is available.
 
 Environment:
   DOKPLOY_URL         Defaults to http://211.47.74.86:3000
@@ -34,6 +38,10 @@ while [[ $# -gt 0 ]]; do
     --install)
       INSTALL_MODE="${2:?Missing value for --install}"
       shift 2
+      ;;
+    --require-auth)
+      REQUIRE_AUTH="1"
+      shift
       ;;
     --no-verify)
       VERIFY="0"
@@ -69,6 +77,33 @@ install_cli() {
   npm install -g @dokploy/cli@latest
 }
 
+has_persisted_auth_config() {
+  if ! command -v npm >/dev/null 2>&1; then
+    return 1
+  fi
+
+  node - <<'NODE'
+const { execFileSync } = require("node:child_process");
+const { existsSync, readFileSync } = require("node:fs");
+const path = require("node:path");
+
+try {
+  const root = execFileSync("npm", ["root", "-g"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  }).trim();
+  const configPath = path.join(root, "@dokploy", "cli", "config.json");
+  if (!existsSync(configPath)) {
+    process.exit(1);
+  }
+  const config = JSON.parse(readFileSync(configPath, "utf8"));
+  process.exit(config && config.token && config.url ? 0 : 1);
+} catch {
+  process.exit(1);
+}
+NODE
+}
+
 case "$INSTALL_MODE" in
   auto)
     if ! command -v dokploy >/dev/null 2>&1; then
@@ -97,7 +132,15 @@ if [[ -n "$TOKEN" ]]; then
   echo "Authenticating with supplied API key..."
   dokploy auth -u "$URL" -t "$TOKEN" >/dev/null
 else
-  echo "No API key supplied. Will use existing dokploy auth config or environment."
+  if has_persisted_auth_config; then
+    echo "No API key supplied. Using existing dokploy auth config."
+  elif [[ "$REQUIRE_AUTH" == "1" ]]; then
+    echo "Dokploy authentication is required, but no API key or persisted CLI auth config was found." >&2
+    echo "Set DOKPLOY_API_KEY or DOKPLOY_AUTH_TOKEN, or create an API key in the Dokploy console and rerun this command." >&2
+    exit 77
+  else
+    echo "No API key supplied. Will use existing dokploy auth config or environment if available."
+  fi
 fi
 
 if [[ "$VERIFY" == "1" ]]; then

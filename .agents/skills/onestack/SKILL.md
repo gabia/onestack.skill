@@ -27,7 +27,7 @@ http://211.47.74.86:3000
 - Register the domain before queueing the deploy so Traefik labels are present on the created container. If a domain is added after a successful deploy, redeploy the compose.
 - Default public domains must use `*.onestack.run`, usually `<app-slug>.onestack.run`. Do not use `*.traefik.me` except as an explicit temporary diagnostic fallback.
 - Before git-backed deployments, inspect git status. Git-backed Dokploy deploys from remote sources; uncommitted or unpushed local changes usually are not deployed.
-- If authentication is missing, ask for a Dokploy API key or tell the user how to create one in the console. Do not invent credentials.
+- Before any remote Dokploy lookup, deployment, image push for deployment, or resource mutation, run the Dokploy auth preflight. If no API key or persisted CLI auth is available, ask for a Dokploy API key or tell the user how to create one in the console. Do not invent credentials.
 
 ## Fast Start
 
@@ -37,12 +37,14 @@ http://211.47.74.86:3000
 node .agents/skills/onestack/scripts/inspect_project.mjs .
 ```
 
-2. Install or verify the CLI, then authenticate:
+2. Install or verify the CLI, then run the required Dokploy auth preflight:
 
 ```bash
-DOKPLOY_URL=http://211.47.74.86:3000 DOKPLOY_API_KEY="$DOKPLOY_API_KEY" \
-  bash .agents/skills/onestack/scripts/bootstrap_dokploy.sh
+DOKPLOY_URL=http://211.47.74.86:3000 \
+  bash .agents/skills/onestack/scripts/bootstrap_dokploy.sh --require-auth
 ```
+
+If the preflight reports missing authentication, stop before remote Dokploy work and ask the user for `DOKPLOY_API_KEY` or give console API-key creation steps.
 
 3. Read the command guide when creating or updating Dokploy resources:
 
@@ -53,7 +55,7 @@ sed -n '1,220p' .agents/skills/onestack/references/dokploy-cli.md
 ## Deployment Workflow
 
 1. Analyze the local project with `inspect_project.mjs`.
-2. Authenticate with `bootstrap_dokploy.sh`.
+2. Authenticate with `bootstrap_dokploy.sh --require-auth`; stop and request a Dokploy API key if the preflight fails.
 3. Choose the deployment mode:
    - Use existing `docker-compose.yml`/`compose.yml` first when present.
    - If a `Dockerfile` exists and git providers are unavailable, build and push an image, then deploy a raw compose file using that image.
@@ -129,6 +131,14 @@ bash .agents/skills/onestack/scripts/bootstrap_dokploy.sh
 ```
 
 The CLI also accepts `DOKPLOY_AUTH_TOKEN`. `dokploy auth -u <url> -t <token>` persists credentials for later CLI calls, but environment variables are preferable in automation because they make the target server explicit.
+
+For deployment automation, verify auth before remote work:
+
+```bash
+bash .agents/skills/onestack/scripts/bootstrap_dokploy.sh --require-auth
+```
+
+`--require-auth` succeeds with a supplied `DOKPLOY_API_KEY`/`DOKPLOY_AUTH_TOKEN` or an existing Dokploy CLI auth config. If it fails, ask the user for a Dokploy API key or explain how to create one in the Dokploy console.
 
 ## References
 

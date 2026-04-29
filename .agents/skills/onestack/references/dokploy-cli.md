@@ -20,6 +20,12 @@ dokploy auth -u "$DOKPLOY_URL" -t "$DOKPLOY_API_KEY"
 
 The CLI accepts either `DOKPLOY_API_KEY` or `DOKPLOY_AUTH_TOKEN` together with `DOKPLOY_URL`.
 
+Before discovery, deployment, or resource changes, run the auth preflight and stop to request a Dokploy API key if it fails:
+
+```bash
+bash .agents/skills/onestack/scripts/bootstrap_dokploy.sh --require-auth
+```
+
 ## Discovery Commands
 
 ```bash
