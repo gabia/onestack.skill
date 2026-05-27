@@ -72,7 +72,90 @@ dokploy application create \
   --json
 ```
 
-Attach a plain git remote:
+### Preferred Non-Git Paths
+
+Use these first when users do not have local Docker or external git access.
+
+#### Prebuilt Static Assets
+
+Create the application, set `buildType=static`, register the domain, then upload a ZIP of the built files.
+
+Some CLI versions wrongly require irrelevant options for `save-build-type`. When that happens, call the Dokploy HTTP API directly:
+
+```bash
+curl -sS -X POST \
+  -H "x-api-key: $DOKPLOY_API_KEY" \
+  -H "content-type: application/json" \
+  --data '{"applicationId":"<id>","buildType":"static","dockerfile":"Dockerfile","dockerContextPath":null,"dockerBuildStage":null,"herokuVersion":null,"railpackVersion":null,"publishDirectory":".","isStaticSpa":false}' \
+  "$DOKPLOY_URL/api/application.saveBuildType"
+```
+
+Upload the ZIP through the tRPC endpoint that the UI uses:
+
+```bash
+curl -sS -X POST \
+  -H "x-api-key: $DOKPLOY_API_KEY" \
+  -F "applicationId=<applicationId>" \
+  -F "zip=@/tmp/app.zip;type=application/zip" \
+  "$DOKPLOY_URL/api/trpc/application.dropDeployment"
+```
+
+#### Frontend Source Build
+
+For Vite, Astro, Vue, Svelte, or similar frontend source projects, prefer server-side builds with `nixpacks` plus a publish directory.
+
+```bash
+curl -sS -X POST \
+  -H "x-api-key: $DOKPLOY_API_KEY" \
+  -H "content-type: application/json" \
+  --data '{"applicationId":"<id>","buildType":"nixpacks","dockerfile":"Dockerfile","dockerContextPath":null,"dockerBuildStage":null,"herokuVersion":null,"railpackVersion":null,"publishDirectory":"dist","isStaticSpa":true}' \
+  "$DOKPLOY_URL/api/application.saveBuildType"
+```
+
+The upload still uses `/api/trpc/application.dropDeployment`.
+
+#### Server App
+
+For Node or Python server apps, prefer `application + drop + nixpacks` unless the repository already relies on a curated Dockerfile.
+
+If the repo depends on a Dockerfile and you still want Dokploy to build server-side without user-local Docker, set `buildType=dockerfile` instead of switching to Compose:
+
+```bash
+curl -sS -X POST \
+  -H "x-api-key: $DOKPLOY_API_KEY" \
+  -H "content-type: application/json" \
+  --data '{"applicationId":"<id>","buildType":"dockerfile","dockerfile":"Dockerfile","dockerContextPath":".","dockerBuildStage":null,"herokuVersion":null,"railpackVersion":null,"publishDirectory":null,"isStaticSpa":false}' \
+  "$DOKPLOY_URL/api/application.saveBuildType"
+```
+
+Save runtime environment variables. Some CLI versions also over-validate this mutation, so the HTTP API is the reliable fallback:
+
+```bash
+curl -sS -X POST \
+  -H "x-api-key: $DOKPLOY_API_KEY" \
+  -H "content-type: application/json" \
+  --data '{"applicationId":"<id>","env":"PORT=3000\nKEY=value","buildArgs":"","buildSecrets":"","createEnvFile":true}' \
+  "$DOKPLOY_URL/api/application.saveEnvironment"
+```
+
+#### App Plus Managed Database
+
+Prefer Dokploy managed databases over bundling the database into the application Compose.
+
+```bash
+dokploy postgres create --name "<name>" --appName "<slug>" --databaseName "<db>" --databaseUser "<user>" --databasePassword "<password>" --environmentId "<environmentId>" --json
+dokploy postgres deploy --postgresId "<postgresId>" --json
+```
+
+The internal Postgres connection string format is:
+
+```bash
+postgresql://<databaseUser>:<databasePassword>@<postgres-app-name>:5432/<databaseName>
+```
+
+### Git-Backed Application
+
+Attach a plain git remote only when the user confirms the provider/source is available:
 
 ```bash
 dokploy application save-git-provider \
@@ -137,7 +220,7 @@ dokploy application deploy \
 
 ## Compose Deployment
 
-Compose is the default deployment path for Onestack. Prefer it over application deployments unless the project is a pure static frontend or the user explicitly asks for another mode.
+Use Compose when the repository already ships a Compose file and intends to stay compose-managed.
 
 Create a compose resource:
 
@@ -154,7 +237,9 @@ dokploy compose create \
 
 ### Raw Image Compose
 
-Use raw image compose when git providers are unavailable. Build and push the image first:
+Use raw image compose when Compose must stay the deployment model and the stack is already image-based or can be safely converted to image references.
+
+Build and push the image first:
 
 ```bash
 TAG="ttl.sh/<app-slug>-$(date +%s):24h"
@@ -162,7 +247,7 @@ docker buildx build --builder desktop-linux --platform linux/amd64 -t "$TAG" --p
 docker buildx imagetools inspect "$TAG"
 ```
 
-If a custom buildx builder fails with TLS/CA verification while pulling base images, retry with the Docker Desktop/default builder. If Docker is not running locally, start Docker Desktop before building.
+If a custom buildx builder fails with TLS/CA verification while pulling base images, retry with the Docker Desktop/default builder. This remains a fallback path because it requires local Docker.
 
 Render an image-only compose file. Prefer `expose` and a Dokploy domain route; host `ports` can be blocked externally or conflict with other services.
 
@@ -188,6 +273,51 @@ node .agents/skills/onestack/scripts/deploy_raw_compose.mjs \
 ```
 
 The helper creates `<app-slug>.onestack.run` unless `--host` is supplied. It creates the domain before queueing the deployment so Traefik labels are present on first container creation.
+
+### Raw Self-Contained Compose
+
+If the Compose file is already image-based or otherwise self-contained, create the Compose resource directly from the raw file contents:
+
+```bash
+dokploy compose create \
+  --name "<app>" \
+  --appName "<app-slug>" \
+  --description "<description>" \
+  --environmentId "<environmentId>" \
+  --composeType docker-compose \
+  --composeFile "$(cat docker-compose.yml)" \
+  --json
+```
+
+Then register the domain and deploy:
+
+```bash
+dokploy domain create \
+  --host "<app-slug>.onestack.run" \
+  --path "/" \
+  --port "<container-port>" \
+  --composeId "<composeId>" \
+  --serviceName "<service-name>" \
+  --domainType compose \
+  --certificateType none \
+  --json
+
+dokploy compose deploy \
+  --composeId "<composeId>" \
+  --title "Deploy raw compose" \
+  --description "Manual raw compose deploy" \
+  --json
+```
+
+This path was validated against a live image-based multi-service Compose stack.
+
+### Build-Context Compose Warning
+
+Do not assume raw Compose can handle local `build:` contexts when git/source access is unavailable. Dokploy's raw Compose path writes the Compose file itself, but it does not upload the entire source tree that a local build context expects. In Dockerless and gitless environments, prefer:
+
+- `application + drop + nixpacks`
+- `application + drop + dockerfile`
+- managed databases instead of embedding the database in Compose
 
 ### Git-Backed Compose
 
@@ -270,8 +400,8 @@ Run `dokploy <service> deploy --help` first because generated command option nam
 Inspect the deployed resource:
 
 ```bash
-dokploy application one --applicationId "<applicationId>" --json
-dokploy compose one --composeId "<composeId>" --json
+curl -sS -H "x-api-key: $DOKPLOY_API_KEY" "$DOKPLOY_URL/api/application.one?applicationId=<applicationId>"
+curl -sS -H "x-api-key: $DOKPLOY_API_KEY" "$DOKPLOY_URL/api/compose.one?composeId=<composeId>"
 ```
 
 Inspect deployment history:
@@ -294,9 +424,11 @@ dokploy deployment all-centralized --json
 
 Before deploy:
 
-- Prefer compose. Use static only for frontend-only projects with no server/API/persistence.
-- Confirm the Docker image is pushed to a registry the Dokploy host can pull.
-- Confirm compose uses the correct internal service port.
+- If the repo already owns Compose, keep Compose. Otherwise prefer `application + drop`.
+- For frontend source builds, prefer `nixpacks` with `publishDirectory` over telling users to install Docker.
+- For app-plus-database systems, prefer a managed Dokploy database and internal service DNS.
+- Confirm Compose uses the correct internal service port.
+- Confirm any Docker image used by Compose is pullable by the Dokploy host.
 - Confirm the Dokploy domain is `<app-slug>.onestack.run`.
 - Confirm required env vars are present in Dokploy, not just in local `.env`.
 - Confirm the app exposes the port used by the Dokploy domain route.
@@ -305,6 +437,7 @@ After deploy:
 
 - Read the deploy command JSON response and save the resource ID in notes for the final response.
 - Poll `dokploy deployment queue-list --json` until the deployment is no longer queued.
-- Query `dokploy project all --json` and confirm `composeStatus` is `done`.
+- Query `dokploy project all --json` and confirm `applicationStatus` or `composeStatus` is `done`.
 - Curl `http://<app-slug>.onestack.run/` and a health endpoint if one exists.
+- If the public host returns `502` immediately after status changes to `done`, retry for a short window before declaring failure.
 - If a domain was created after deployment, redeploy before final verification.

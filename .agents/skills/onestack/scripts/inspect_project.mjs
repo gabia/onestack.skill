@@ -5,6 +5,7 @@ import path from "node:path";
 
 const COMPOSE_FILES = ["docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"];
 const ENV_FILE_NAMES = [".env", ".env.example", ".env.production", ".env.local", ".env.sample"];
+const STATIC_OUTPUT_DIRS = ["dist", "build", "out"];
 
 function run(command, args, cwd) {
   try {
@@ -87,6 +88,36 @@ function dockerExposePort(root) {
   }
 }
 
+function detectStaticOutputDir(root) {
+  if (existsSync(path.join(root, "index.html"))) {
+    return ".";
+  }
+
+  for (const dir of STATIC_OUTPUT_DIRS) {
+    if (existsSync(path.join(root, dir, "index.html"))) {
+      return dir;
+    }
+  }
+  return null;
+}
+
+function inspectComposeFile(root, composeFile) {
+  if (!composeFile) {
+    return null;
+  }
+
+  try {
+    const text = readFileSync(path.join(root, composeFile), "utf8");
+    return {
+      hasBuildDirective: /^\s*build\s*:/im.test(text),
+      hasImageDirective: /^\s*image\s*:/im.test(text),
+      usesExpose: /^\s*expose\s*:/im.test(text),
+    };
+  } catch {
+    return null;
+  }
+}
+
 function redactRemote(remote) {
   if (!remote) {
     return remote;
@@ -134,66 +165,113 @@ function intFromEnv(name, fallback) {
   return Number.isFinite(value) ? value : fallback;
 }
 
-function inferRecommendation(root, pkg, composeFile) {
+function inferPublishDirectory(pkg, root) {
+  const detectedOutput = detectStaticOutputDir(root);
+  if (detectedOutput) {
+    return detectedOutput;
+  }
+
+  if (!pkg) {
+    return null;
+  }
+
+  const frameworks = new Set(pkg.frameworks || []);
+  if (frameworks.has("vite") || frameworks.has("astro") || frameworks.has("vue") || frameworks.has("svelte")) {
+    return "dist";
+  }
+
+  if (frameworks.has("react") && !frameworks.has("next")) {
+    return "build";
+  }
+
+  return null;
+}
+
+function inferRecommendation(root, pkg, composeFile, composeInfo) {
   if (composeFile) {
+    const reason = composeInfo?.hasBuildDirective
+      ? "compose file detected; keep Compose first, but build-context Compose usually needs server-side source access"
+      : "compose file detected; raw Compose is a good fit";
+
     return {
       dokployResource: "compose",
       composePath: composeFile,
       composeType: "docker-compose",
-      reason: "compose file detected",
+      composeSourceMode: composeInfo?.hasBuildDirective ? "needs-source-context" : "raw",
+      composeHasBuildDirective: Boolean(composeInfo?.hasBuildDirective),
+      composeHasImageDirective: Boolean(composeInfo?.hasImageDirective),
+      reason,
     };
   }
 
   const exposed = dockerExposePort(root);
   if (existsSync(path.join(root, "Dockerfile"))) {
     return {
-      dokployResource: "compose",
-      sourceType: "raw-image",
+      dokployResource: "application",
+      sourceType: "drop",
+      buildType: "dockerfile",
       dockerfile: "Dockerfile",
-      composeType: "docker-compose",
       dockerContextPath: ".",
       portHint: exposed,
-      reason: "Dockerfile detected; build and push an image, then deploy it with raw Docker Compose",
+      reason: "Dockerfile detected; prefer Dokploy application deployment so users do not need local Docker",
+    };
+  }
+
+  const staticOutputDir = detectStaticOutputDir(root);
+  if (!pkg && staticOutputDir) {
+    return {
+      dokployResource: "application",
+      sourceType: "drop",
+      buildType: "static",
+      publishDirectory: staticOutputDir,
+      isStaticSpa: true,
+      portHint: 80,
+      reason: "prebuilt static output detected; prefer application drop with static assets",
     };
   }
 
   if (pkg) {
     const frameworks = new Set(pkg.frameworks || []);
     const hasServer = frameworks.has("express") || frameworks.has("fastify") || frameworks.has("nestjs");
+    const publishDirectory = inferPublishDirectory(pkg, root);
     if (!hasServer && (frameworks.has("vite") || frameworks.has("astro") || frameworks.has("vue") || frameworks.has("svelte"))) {
       return {
         dokployResource: "application",
-        buildType: "static",
-        publishDirectory: "dist",
+        sourceType: "drop",
+        buildType: "nixpacks",
+        publishDirectory: publishDirectory || "dist",
         isStaticSpa: frameworks.has("react") || frameworks.has("vue") || frameworks.has("svelte"),
         portHint: 80,
-        reason: "frontend build tooling detected without a server framework",
+        reason: "frontend build tooling detected without a server framework; prefer server-side build plus static publish output",
       };
     }
 
     if (frameworks.has("next")) {
       return {
         dokployResource: "application",
+        sourceType: "drop",
         buildType: "nixpacks",
         portHint: 3000,
-        reason: "Next.js app detected without Dockerfile",
+        reason: "Next.js app detected without Dockerfile; prefer application drop with server-side build",
       };
     }
 
     return {
       dokployResource: "application",
+      sourceType: "drop",
       buildType: "nixpacks",
       portHint: intFromEnv("PORT", 3000),
-      reason: "Node package detected without Dockerfile",
+      reason: "Node package detected without Dockerfile; prefer application drop with server-side build",
     };
   }
 
   if (existsSync(path.join(root, "requirements.txt")) || existsSync(path.join(root, "pyproject.toml"))) {
     return {
       dokployResource: "application",
+      sourceType: "drop",
       buildType: "nixpacks",
       portHint: intFromEnv("PORT", 8000),
-      reason: "Python project detected without Dockerfile",
+      reason: "Python project detected without Dockerfile; prefer application drop with server-side build",
     };
   }
 
@@ -211,8 +289,10 @@ function main() {
   }
 
   const composeFile = COMPOSE_FILES.find((name) => existsSync(path.join(root, name))) || null;
+  const composeInfo = inspectComposeFile(root, composeFile);
   const pkg = packageInfo(root);
   const envFiles = ENV_FILE_NAMES.filter((name) => existsSync(path.join(root, name)));
+  const staticOutputDir = detectStaticOutputDir(root);
 
   const result = {
     root,
@@ -225,9 +305,11 @@ function main() {
       requirementsTxt: existsSync(path.join(root, "requirements.txt")) ? "requirements.txt" : null,
       pyprojectToml: existsSync(path.join(root, "pyproject.toml")) ? "pyproject.toml" : null,
       envFiles,
+      staticOutputDir,
     },
+    compose: composeInfo,
     node: pkg,
-    recommendation: inferRecommendation(root, pkg, composeFile),
+    recommendation: inferRecommendation(root, pkg, composeFile, composeInfo),
   };
 
   console.log(JSON.stringify(result, null, 2));
