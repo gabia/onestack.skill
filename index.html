@@ -1,0 +1,1381 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Onestack — Ship local projects in one prompt</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-hero: #07080b;
+  --bg-section: #0e1015;
+  --bg-alt: #0b0d12;
+  --text-primary: #eef1f6;
+  --text-muted: rgba(238,241,246,0.55);
+  --text-dim: rgba(238,241,246,0.32);
+  --accent: #6366f1;
+  --accent-2: #22d3ee;
+  --accent-3: #a78bfa;
+  --good: #34d399;
+  --card-bg: rgba(255,255,255,0.03);
+  --card-border: rgba(255,255,255,0.08);
+  --font-display: 'Inter', -apple-system, 'Segoe UI', 'Helvetica Neue', sans-serif;
+  --font-body: 'Pretendard', '맑은 고딕', 'Malgun Gothic', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', Consolas, monospace;
+}
+
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg-hero);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  overflow-x: hidden;
+  line-height: 1.65;
+}
+
+/* ── NAV ── */
+.site-nav {
+  position: fixed;
+  top: 1.1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.45rem 0.4rem 1rem;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 999px;
+  background: rgba(10,12,18,0.7);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 10px 35px rgba(0,0,0,0.35);
+}
+.nav-brand {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.92rem;
+  letter-spacing: -0.01em;
+  margin-right: 0.5rem;
+  background: linear-gradient(135deg, var(--accent-2), var(--accent-3));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.nav-tab {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.6rem 0.85rem;
+  border-radius: 999px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 0.2s, background 0.2s;
+}
+.nav-tab:hover { color: var(--text-primary); background: rgba(255,255,255,0.05); }
+.nav-tab.is-active {
+  color: #0a0a0a;
+  background: linear-gradient(135deg, var(--accent-2), var(--accent-3));
+}
+.nav-cta {
+  margin-left: 0.3rem;
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-3));
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.nav-cta:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(99,102,241,0.35); }
+
+/* ── HERO ── */
+#hero {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  padding: 6rem 1.5rem 2rem;
+  text-align: center;
+}
+.hero-bg {
+  position: absolute; inset: 0; z-index: 0;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(99,102,241,0.2), transparent 35%),
+    radial-gradient(circle at 80% 30%, rgba(34,211,238,0.15), transparent 38%),
+    radial-gradient(circle at 50% 90%, rgba(167,139,250,0.13), transparent 42%);
+}
+.hero-grid {
+  position: absolute; inset: 0; z-index: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+}
+.hero-content { position: relative; z-index: 1; max-width: 1000px; }
+
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin-bottom: 1.4rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid rgba(34,211,238,0.25);
+  background: rgba(34,211,238,0.06);
+  opacity: 0;
+  animation: fadeUp 0.8s 0.1s forwards;
+}
+.hero-eyebrow::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--good);
+  box-shadow: 0 0 8px var(--good);
+  animation: pulse 1.8s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.hero-title {
+  font-family: var(--font-display);
+  font-size: clamp(3.2rem, 11vw, 7.5rem);
+  font-weight: 800;
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+  background: linear-gradient(135deg, #ffffff 0%, var(--accent-3) 45%, var(--accent-2) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 0.6rem;
+  opacity: 0;
+  animation: fadeUp 0.9s 0.2s forwards;
+}
+.hero-subtitle {
+  font-family: var(--font-display);
+  font-size: clamp(1.05rem, 2.6vw, 1.55rem);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--text-primary);
+  margin-bottom: 1.2rem;
+  opacity: 0;
+  animation: fadeUp 0.9s 0.35s forwards;
+}
+.hero-desc {
+  font-size: clamp(0.96rem, 1.6vw, 1.08rem);
+  color: var(--text-muted);
+  max-width: 660px;
+  margin: 0 auto 2.5rem;
+  opacity: 0;
+  animation: fadeUp 0.9s 0.5s forwards;
+}
+.hero-desc strong { color: var(--text-primary); font-weight: 600; }
+
+.hero-ctas {
+  display: flex;
+  gap: 0.8rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 3rem;
+  opacity: 0;
+  animation: fadeUp 0.9s 0.6s forwards;
+}
+.btn-primary, .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.85rem 1.4rem;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.92rem;
+  text-decoration: none;
+  transition: transform 0.2s, box-shadow 0.2s, background 0.2s, border-color 0.2s;
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent-3));
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(99,102,241,0.3);
+}
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(99,102,241,0.45); }
+.btn-secondary {
+  background: rgba(255,255,255,0.04);
+  color: var(--text-primary);
+  border: 1px solid var(--card-border);
+}
+.btn-secondary:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.18); }
+
+.install-blocks {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.85rem;
+  max-width: 760px;
+  margin: 0 auto 1.4rem;
+  text-align: left;
+  opacity: 0;
+  animation: fadeUp 0.9s 0.7s forwards;
+}
+.install-label {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 0.35rem;
+}
+.terminal-box {
+  background: rgba(0,0,0,0.55);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  padding: 0.85rem 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-family: var(--font-mono);
+  font-size: clamp(0.7rem, 1.5vw, 0.84rem);
+  position: relative;
+  overflow: hidden;
+}
+.terminal-prompt { color: var(--accent-3); flex-shrink: 0; }
+.terminal-text {
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow-x: auto;
+  flex: 1;
+  scrollbar-width: none;
+}
+.terminal-text::-webkit-scrollbar { display: none; }
+.copy-btn {
+  background: none;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
+  color: rgba(238,241,246,0.4);
+  cursor: pointer;
+  padding: 4px 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+.copy-btn:hover { color: var(--accent-2); border-color: var(--accent-2); background: rgba(34,211,238,0.08); }
+.copy-btn.copied { color: var(--good); border-color: var(--good); }
+.copy-btn.copied svg { display: none; }
+.copy-btn.copied::after { content: '✓'; font-size: 14px; }
+
+.hero-meta {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  margin-bottom: 2.5rem;
+  opacity: 0;
+  animation: fadeUp 0.9s 0.85s forwards;
+}
+.hero-meta code {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  background: rgba(255,255,255,0.05);
+  padding: 0.18rem 0.45rem;
+  border-radius: 5px;
+  color: var(--accent-2);
+}
+
+.agents-label {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  margin-bottom: 0.75rem;
+  opacity: 0;
+  animation: fadeUp 0.9s 0.95s forwards;
+}
+.agent-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-bottom: 2.5rem;
+  opacity: 0;
+  animation: fadeUp 0.9s 1.05s forwards;
+}
+.pill {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 0.3rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+.pill:hover { border-color: var(--accent-2); color: var(--accent-2); }
+
+.scroll-indicator {
+  position: absolute;
+  bottom: 1.8rem; left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0;
+  animation: fadeUp 0.9s 1.2s forwards;
+}
+.chevron {
+  width: 18px; height: 18px;
+  border-right: 2px solid var(--text-dim);
+  border-bottom: 2px solid var(--text-dim);
+  transform: rotate(45deg);
+  animation: chevron-bounce 1.5s ease-in-out infinite;
+}
+@keyframes chevron-bounce {
+  0%, 100% { transform: rotate(45deg) translateY(0); opacity: 0.4; }
+  50% { transform: rotate(45deg) translateY(4px); opacity: 1; }
+}
+@keyframes fadeUp {
+  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(14px); }
+}
+
+/* ── SECTIONS ── */
+section { padding: 6.5rem 1.5rem; width: 100%; }
+.section-inner { max-width: 1100px; margin: 0 auto; }
+
+.section-label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin-bottom: 1rem;
+}
+.section-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.9rem, 4.8vw, 3rem);
+  font-weight: 800;
+  line-height: 1.15;
+  margin-bottom: 1rem;
+  letter-spacing: -0.025em;
+}
+.section-subtitle {
+  font-size: 1rem;
+  color: var(--text-muted);
+  max-width: 620px;
+  margin-bottom: 3rem;
+}
+
+/* ── ABOUT ── */
+#about { background: var(--bg-hero); position: relative; overflow: hidden; }
+.about-glow {
+  position: absolute;
+  width: 720px; height: 720px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(99,102,241,0.1) 0%, rgba(34,211,238,0.06) 50%, transparent 70%);
+  top: 60%; left: 60%;
+  transform: translate(-50%, -50%);
+}
+#about .section-inner { position: relative; z-index: 1; }
+.about-lead {
+  font-family: var(--font-display);
+  font-size: clamp(1.1rem, 2.1vw, 1.35rem);
+  color: var(--text-primary);
+  line-height: 1.65;
+  max-width: 760px;
+  margin-bottom: 1.8rem;
+}
+.about-lead strong {
+  background: linear-gradient(135deg, var(--accent-2), var(--accent-3));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 700;
+}
+.about-desc { color: var(--text-muted); max-width: 740px; margin-bottom: 2.6rem; }
+
+.about-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-top: 2rem;
+}
+.stat-card {
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  padding: 1.3rem 1.4rem;
+  background: var(--card-bg);
+}
+.stat-num {
+  font-family: var(--font-display);
+  font-size: 1.9rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent-2), var(--accent-3));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 0.2rem;
+}
+.stat-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* ── FEATURES ── */
+#features { background: var(--bg-section); }
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.2rem;
+}
+.feature-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  padding: 1.9rem;
+  transition: border-color 0.3s, background 0.3s, transform 0.3s;
+}
+.feature-card:hover {
+  border-color: rgba(99,102,241,0.35);
+  background: rgba(99,102,241,0.04);
+  transform: translateY(-3px);
+}
+.feature-icon {
+  width: 44px; height: 44px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, rgba(99,102,241,0.18), rgba(34,211,238,0.12));
+  border: 1px solid rgba(99,102,241,0.25);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1.1rem;
+  color: var(--accent-2);
+}
+.feature-icon svg { width: 22px; height: 22px; }
+.feature-title {
+  font-family: var(--font-display);
+  font-size: 1.08rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+}
+.feature-desc { font-size: 0.92rem; color: var(--text-muted); line-height: 1.65; }
+.feature-desc code {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--accent-2);
+  background: rgba(255,255,255,0.04);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+
+/* ── HOW ── */
+#how { background: var(--bg-alt); }
+.how-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.2rem;
+}
+.how-card {
+  position: relative;
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  padding: 2rem 1.7rem 1.6rem;
+  background: var(--card-bg);
+  overflow: hidden;
+}
+.how-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent-2), var(--accent-3));
+  opacity: 0.6;
+}
+.how-step {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  color: var(--accent-2);
+  margin-bottom: 0.65rem;
+}
+.how-title {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 0.55rem;
+}
+.how-desc { color: var(--text-muted); font-size: 0.92rem; line-height: 1.65; }
+
+/* ── WORKFLOW ── */
+#workflow { background: var(--bg-section); }
+.workflow-steps {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+.workflow-step {
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  gap: 1.2rem;
+  align-items: start;
+  padding: 1.4rem 1.6rem;
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  background: var(--card-bg);
+  transition: border-color 0.3s, background 0.3s;
+}
+.workflow-step:hover {
+  border-color: rgba(99,102,241,0.3);
+  background: rgba(99,102,241,0.03);
+}
+.step-num {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-3));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: #0a0a0a;
+  font-size: 1rem;
+}
+.step-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.02rem;
+  margin-bottom: 0.35rem;
+}
+.step-desc { color: var(--text-muted); font-size: 0.92rem; line-height: 1.7; }
+.step-desc code {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--accent-2);
+  background: rgba(255,255,255,0.04);
+  padding: 0.12rem 0.45rem;
+  border-radius: 4px;
+}
+
+/* ── PATHS ── */
+#paths { background: var(--bg-alt); }
+.path-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+}
+.path-card {
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  padding: 1.5rem 1.6rem;
+  background: var(--card-bg);
+}
+.path-tag {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.22rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(52,211,153,0.12);
+  color: var(--good);
+  border: 1px solid rgba(52,211,153,0.25);
+  margin-bottom: 0.7rem;
+}
+.path-title {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+.path-desc { color: var(--text-muted); font-size: 0.88rem; line-height: 1.65; }
+
+/* ── SAFETY ── */
+#safety { background: var(--bg-section); }
+.safety-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+}
+.safety-card {
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  padding: 1.4rem 1.5rem;
+  background: var(--card-bg);
+  display: flex;
+  gap: 0.9rem;
+  align-items: flex-start;
+}
+.safety-icon {
+  flex-shrink: 0;
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  background: rgba(248,113,113,0.12);
+  border: 1px solid rgba(248,113,113,0.25);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #f87171;
+}
+.safety-icon svg { width: 18px; height: 18px; }
+.safety-text { font-size: 0.92rem; color: var(--text-muted); line-height: 1.65; }
+.safety-text strong { color: var(--text-primary); font-weight: 600; }
+.safety-text code {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--accent-2);
+  background: rgba(255,255,255,0.04);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+
+/* ── CTA ── */
+#cta {
+  background:
+    radial-gradient(circle at 30% 50%, rgba(99,102,241,0.25), transparent 50%),
+    radial-gradient(circle at 70% 50%, rgba(34,211,238,0.18), transparent 50%),
+    var(--bg-alt);
+  text-align: center;
+}
+.cta-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.9rem, 5vw, 3rem);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  margin-bottom: 1rem;
+  background: linear-gradient(135deg, #fff, var(--accent-3));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.cta-desc {
+  font-size: 1rem;
+  color: var(--text-muted);
+  max-width: 580px;
+  margin: 0 auto 2.2rem;
+}
+.cta-ctas {
+  display: flex;
+  gap: 0.8rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ── FAQ ── */
+#faq { background: var(--bg-section); }
+.faq-list { display: flex; flex-direction: column; gap: 0.5rem; max-width: 820px; }
+.faq-item {
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.faq-q {
+  width: 100%;
+  background: var(--card-bg);
+  border: none;
+  padding: 1.1rem 1.5rem;
+  text-align: left;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  transition: background 0.2s;
+}
+.faq-q:hover { background: rgba(255,255,255,0.04); }
+.faq-chevron {
+  width: 16px; height: 16px;
+  border-right: 2px solid var(--text-dim);
+  border-bottom: 2px solid var(--text-dim);
+  transform: rotate(45deg);
+  transition: transform 0.3s;
+  flex-shrink: 0;
+}
+.faq-item.open .faq-chevron { transform: rotate(225deg); }
+.faq-a {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.35s ease;
+  background: rgba(255,255,255,0.015);
+}
+.faq-a-inner {
+  padding: 0 1.5rem 1.2rem;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  line-height: 1.75;
+}
+.faq-a-inner code {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--accent-2);
+  background: rgba(255,255,255,0.05);
+  padding: 0.12rem 0.4rem;
+  border-radius: 4px;
+}
+.faq-item.open .faq-a { max-height: 420px; }
+
+/* ── FOOTER ── */
+footer {
+  background: var(--bg-hero);
+  padding: 3rem 1.5rem;
+  text-align: center;
+  position: relative;
+}
+footer::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 10%; right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), var(--accent-2), transparent);
+}
+.footer-brand {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.05rem;
+  background: linear-gradient(135deg, var(--accent-2), var(--accent-3));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 0.3rem;
+}
+.footer-sub { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 0.5rem; }
+.footer-links {
+  display: inline-flex;
+  gap: 0.9rem;
+  font-size: 0.82rem;
+}
+.footer-links a { color: var(--accent-2); text-decoration: none; }
+.footer-links a:hover { text-decoration: underline; }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 720px) {
+  .nav-brand { display: none; }
+  .nav-tab { padding: 0.6rem 0.65rem; font-size: 0.68rem; }
+}
+@media (max-width: 640px) {
+  section { padding: 5rem 1.1rem; }
+  .features-grid { grid-template-columns: 1fr; }
+  .workflow-step { grid-template-columns: 44px 1fr; gap: 0.9rem; padding: 1.1rem 1.2rem; }
+  .step-num { width: 36px; height: 36px; font-size: 0.9rem; }
+  .site-nav { width: calc(100% - 1.5rem); top: 0.75rem; padding: 0.4rem; }
+  .nav-cta { display: none; }
+}
+
+/* ── REVEAL ── */
+.reveal-stagger > * { opacity: 0; transform: translateY(20px); transition: opacity 0.6s ease, transform 0.6s ease; }
+.reveal-stagger.visible > * { opacity: 1; transform: translateY(0); }
+.reveal-stagger.visible > *:nth-child(1) { transition-delay: 0.05s; }
+.reveal-stagger.visible > *:nth-child(2) { transition-delay: 0.12s; }
+.reveal-stagger.visible > *:nth-child(3) { transition-delay: 0.19s; }
+.reveal-stagger.visible > *:nth-child(4) { transition-delay: 0.26s; }
+.reveal-stagger.visible > *:nth-child(5) { transition-delay: 0.33s; }
+.reveal-stagger.visible > *:nth-child(6) { transition-delay: 0.4s; }
+.reveal-stagger.visible > *:nth-child(7) { transition-delay: 0.47s; }
+.reveal-stagger.visible > *:nth-child(8) { transition-delay: 0.54s; }
+</style>
+</head>
+<body>
+
+<nav class="site-nav">
+  <span class="nav-brand">Onestack</span>
+  <a class="nav-tab is-active" href="#hero">Home</a>
+  <a class="nav-tab" href="#about">About</a>
+  <a class="nav-tab" href="#features">Features</a>
+  <a class="nav-tab" href="#workflow">Workflow</a>
+  <a class="nav-tab" href="#faq">FAQ</a>
+  <a class="nav-cta" href="https://console.onestack.run/" target="_blank" rel="noopener">Console →</a>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-grid"></div>
+  <div class="hero-content">
+    <p class="hero-eyebrow">AI-native deploy platform</p>
+    <h1 class="hero-title">Onestack</h1>
+    <p class="hero-subtitle">로컬 프로젝트를 한 마디로 배포하는 AI 네이티브 플랫폼</p>
+    <p class="hero-desc">
+      Onestack은 AI 에이전트가 <strong>프로젝트 분석, 빌드 타입 결정, 도메인 라우팅, 환경 변수 설정,
+      배포 실행, 상태 검증</strong>까지 한 흐름에서 처리하도록 설계된 배포 플랫폼입니다.
+      "Onestack에 배포해줘" 한마디면 충분합니다.
+    </p>
+
+    <div class="hero-ctas">
+      <a class="btn-primary" href="#install">
+        Get Started
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </a>
+      <a class="btn-secondary" href="https://console.onestack.run/" target="_blank" rel="noopener">
+        Open Console
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      </a>
+    </div>
+
+    <div class="install-blocks" id="install">
+      <div>
+        <div class="install-label">macOS / Linux</div>
+        <div class="terminal-box">
+          <span class="terminal-prompt">$</span>
+          <span class="terminal-text">curl -fsSL https://raw.githubusercontent.com/gabia/onestack.skill/main/install.sh | bash</span>
+          <button class="copy-btn" onclick="copyCmd(this,'curl -fsSL https://raw.githubusercontent.com/gabia/onestack.skill/main/install.sh | bash')" title="복사">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+          </button>
+        </div>
+      </div>
+      <div>
+        <div class="install-label">Windows (PowerShell)</div>
+        <div class="terminal-box">
+          <span class="terminal-prompt">PS&gt;</span>
+          <span class="terminal-text">irm https://raw.githubusercontent.com/gabia/onestack.skill/main/install.ps1 | iex</span>
+          <button class="copy-btn" onclick="copyCmd(this,'irm https://raw.githubusercontent.com/gabia/onestack.skill/main/install.ps1 | iex')" title="복사">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+          </button>
+        </div>
+      </div>
+      <div>
+        <div class="install-label">API 키 설정 (설치 후 1회)</div>
+        <div class="terminal-box">
+          <span class="terminal-prompt">$</span>
+          <span class="terminal-text">export ONESTACK_URL=https://console.onestack.run ONESTACK_API_KEY=&lt;your-api-key&gt;</span>
+          <button class="copy-btn" onclick="copyCmd(this,'export ONESTACK_URL=https://console.onestack.run ONESTACK_API_KEY=&lt;your-api-key&gt;')" title="복사">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+    <p style="font-size:0.78rem; color: var(--text-dim); margin-top:0.4rem; opacity:0; animation: fadeUp 0.9s 0.78s forwards;">
+      Git 없이 설치 가능 · curl / PowerShell 기본 명령으로 GitHub에서 직접 다운로드합니다.
+    </p>
+
+    <p class="hero-meta">
+      콘솔: <code>https://console.onestack.run</code> · 기본 도메인: <code>*.onestack.run</code>
+    </p>
+
+    <p class="agents-label">지원 에이전트</p>
+    <div class="agent-pills">
+      <span class="pill">Claude Code</span>
+      <span class="pill">Cursor</span>
+      <span class="pill">Codex CLI</span>
+      <span class="pill">Gemini CLI</span>
+      <span class="pill">OpenCode</span>
+    </div>
+  </div>
+  <div class="scroll-indicator">
+    <span>scroll</span>
+    <div class="chevron"></div>
+  </div>
+</section>
+
+<!-- ABOUT -->
+<section id="about">
+  <div class="about-glow"></div>
+  <div class="section-inner">
+    <p class="section-label">What is Onestack</p>
+    <h2 class="section-title">대화 한 마디로 배포가<br>끝나는 플랫폼</h2>
+    <p class="about-lead">
+      Onestack은 AI 에이전트가 <strong>로컬에서 만든 프로젝트를 즉시 라이브 서비스로 만드는</strong>
+      배포 플랫폼입니다. 콘솔에서 직접 설정할 수도 있지만, 에이전트에게 한 마디만 해도 분석·구성·배포·검증을 자동으로 마칩니다.
+    </p>
+    <p class="about-desc">
+      Static Site, Frontend, Server App, Compose 멀티 서비스, Managed Database까지 — 프로젝트 구조를
+      에이전트가 분석하고 가장 적합한 배포 모드를 선택합니다. 도메인은 기본
+      <code style="font-family:var(--font-mono);color:var(--accent-2);font-size:0.85em">&lt;app-slug&gt;.onestack.run</code>으로 자동 라우팅되고,
+      배포 후 상태와 응답까지 검증해 결과를 알려줍니다.
+    </p>
+
+    <div class="about-stats">
+      <div class="stat-card">
+        <div class="stat-num">5+</div>
+        <div class="stat-label">검증된 배포 경로 (Static · Nixpacks · Dockerfile · Compose · Managed DB)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">1 cmd</div>
+        <div class="stat-label">한 줄 자연어 요청으로 배포까지 완료</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">*.onestack.run</div>
+        <div class="stat-label">기본 도메인 자동 발급 + Traefik 라우팅</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">0</div>
+        <div class="stat-label">로컬 Docker 필요 없음 (Drop 업로드 지원)</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="section-inner">
+    <p class="section-label">Capabilities</p>
+    <h2 class="section-title">한 마디로 끝나는 배포 작업</h2>
+    <p class="section-subtitle">에이전트가 Onestack 위에서 자동으로 처리하는 기능들</p>
+    <div class="features-grid reveal-stagger">
+
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </div>
+        <div class="feature-title">프로젝트 자동 분석</div>
+        <div class="feature-desc">
+          Git 상태, 프레임워크, Dockerfile, Compose, 환경 파일을 탐지해 Onestack 리소스 타입을 자동 추천합니다.
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </div>
+        <div class="feature-title">빌드 타입 자동 매핑</div>
+        <div class="feature-desc">
+          프로젝트 구조에 맞춰 <code>static</code>, <code>nixpacks</code>, <code>dockerfile</code>,
+          <code>compose</code> 중 가장 안전한 경로를 자동 선택합니다.
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        </div>
+        <div class="feature-title">리소스 자동 생성</div>
+        <div class="feature-desc">
+          Project · Environment · Application · Compose · Database를 검색하고 없으면 생성, 있으면 재사용합니다.
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        </div>
+        <div class="feature-title">도메인 자동 발급</div>
+        <div class="feature-desc">
+          <code>&lt;app-slug&gt;.onestack.run</code>이 자동으로 발급되고 Traefik 라우팅이 적용됩니다. 도메인은 배포 전에 등록해 무중단으로 노출됩니다.
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+        </div>
+        <div class="feature-title">대화로 끝나는 배포</div>
+        <div class="feature-desc">
+          "Onestack에 배포해줘" · "재배포해줘" · "도메인 바꿔줘" 같은 자연어 요청으로 모든 작업이 실행됩니다.
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>
+        </div>
+        <div class="feature-title">Managed Database</div>
+        <div class="feature-desc">
+          Postgres, MySQL 등을 관리형 서비스로 분리해 앱과 내부 서비스 호스트네임으로 연결합니다. 직접 컨테이너 관리가 필요 없습니다.
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/></svg>
+        </div>
+        <div class="feature-title">로컬 Docker 불필요</div>
+        <div class="feature-desc">
+          ZIP Drop 업로드 경로를 지원해 로컬에 Docker가 없어도 배포가 가능합니다. 빌드는 서버에서 수행됩니다.
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </div>
+        <div class="feature-title">배포 후 자동 검증</div>
+        <div class="feature-desc">
+          배포 큐, 리소스 상태, 공개 URL 응답을 자동 확인합니다. 직후 502는 짧은 retry 윈도우 안에서 재시도합니다.
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- HOW -->
+<section id="how">
+  <div class="section-inner">
+    <p class="section-label">How it works</p>
+    <h2 class="section-title">3단계로 라이브까지</h2>
+    <p class="section-subtitle">스킬 설치 후 처음 배포까지 흐름</p>
+    <div class="how-grid reveal-stagger">
+      <div class="how-card">
+        <div class="how-step">STEP 01</div>
+        <div class="how-title">스킬 설치</div>
+        <div class="how-desc">
+          AI 에이전트에 Onestack 스킬을 설치합니다. 한 번 설치하면 모든 프로젝트에서 사용 가능합니다.
+        </div>
+      </div>
+      <div class="how-card">
+        <div class="how-step">STEP 02</div>
+        <div class="how-title">API 키 발급</div>
+        <div class="how-desc">
+          Onestack 콘솔에서 API 키를 발급받아 환경 변수에 설정합니다. 에이전트가 콘솔과 통신하는 통로입니다.
+        </div>
+      </div>
+      <div class="how-card">
+        <div class="how-step">STEP 03</div>
+        <div class="how-title">한 줄 요청</div>
+        <div class="how-desc">
+          프로젝트 폴더에서 "Onestack에 배포해줘"라고 요청하면 분석부터 배포·검증까지 자동 실행됩니다.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- WORKFLOW -->
+<section id="workflow">
+  <div class="section-inner">
+    <p class="section-label">Deployment Workflow</p>
+    <h2 class="section-title">표준 배포 흐름</h2>
+    <p class="section-subtitle">에이전트가 한 번의 요청으로 순차 실행하는 8단계</p>
+
+    <div class="workflow-steps reveal-stagger">
+      <div class="workflow-step">
+        <div class="step-num">1</div>
+        <div>
+          <div class="step-title">프로젝트 분석</div>
+          <div class="step-desc">Git 상태, 프레임워크, Dockerfile, Compose, 환경 파일을 식별하고 최적 빌드 타입을 결정합니다.</div>
+        </div>
+      </div>
+      <div class="workflow-step">
+        <div class="step-num">2</div>
+        <div>
+          <div class="step-title">Git 상태 점검</div>
+          <div class="step-desc">원격 저장소·브랜치·푸시 상태를 확인합니다. 미푸시 변경은 git-backed 배포에 반영되지 않으므로 사전에 안내합니다.</div>
+        </div>
+      </div>
+      <div class="workflow-step">
+        <div class="step-num">3</div>
+        <div>
+          <div class="step-title">Onestack 인증</div>
+          <div class="step-desc">API 키와 세션을 검증합니다. 실패하면 작업을 멈추고 콘솔에서 키를 발급하는 절차를 안내합니다.</div>
+        </div>
+      </div>
+      <div class="workflow-step">
+        <div class="step-num">4</div>
+        <div>
+          <div class="step-title">Project / Environment 확보</div>
+          <div class="step-desc">기존 Onestack 프로젝트를 검색하고, 없으면 새로 만든 뒤 <code>production</code> 환경을 확보합니다.</div>
+        </div>
+      </div>
+      <div class="workflow-step">
+        <div class="step-num">5</div>
+        <div>
+          <div class="step-title">배포 모드 선택</div>
+          <div class="step-desc">Compose, Application + Drop (static / nixpacks / dockerfile), Raw Compose 중 구조에 맞는 경로를 선택합니다.</div>
+        </div>
+      </div>
+      <div class="workflow-step">
+        <div class="step-num">6</div>
+        <div>
+          <div class="step-title">리소스 구성</div>
+          <div class="step-desc">소스, 빌드 옵션, 환경 변수, 도메인 <code>*.onestack.run</code>, 포트를 등록합니다. 도메인은 배포 전에 등록해 Traefik 라벨이 보장되도록 합니다.</div>
+        </div>
+      </div>
+      <div class="workflow-step">
+        <div class="step-num">7</div>
+        <div>
+          <div class="step-title">배포 실행</div>
+          <div class="step-desc">Application은 ZIP Drop으로, Compose는 Compose Deploy로 트리거합니다. 배포 큐가 처리될 때까지 대기합니다.</div>
+        </div>
+      </div>
+      <div class="workflow-step">
+        <div class="step-num">8</div>
+        <div>
+          <div class="step-title">상태 검증</div>
+          <div class="step-desc">큐 상태, 리소스 상태, 공개 URL 응답을 확인합니다. 직후 일시적 502는 짧은 retry 윈도우 안에서 재확인 후 결과를 보고합니다.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PATHS -->
+<section id="paths">
+  <div class="section-inner">
+    <p class="section-label">Live-Validated Paths</p>
+    <h2 class="section-title">검증된 배포 경로</h2>
+    <p class="section-subtitle">실제 Onestack 인스턴스에서 200 OK까지 확인된 패턴만 기본 선택지로 사용합니다</p>
+    <div class="path-grid">
+      <div class="path-card">
+        <span class="path-tag">Validated</span>
+        <div class="path-title">Application · Drop · Static</div>
+        <div class="path-desc">사전 빌드된 정적 자산. ZIP 업로드 후 공개 URL 200 OK 검증 완료.</div>
+      </div>
+      <div class="path-card">
+        <span class="path-tag">Validated</span>
+        <div class="path-title">Application · Drop · Nixpacks + Managed Postgres</div>
+        <div class="path-desc">서버 앱 + Onestack 관리형 Postgres. DB-backed HTTP 응답까지 end-to-end 검증.</div>
+      </div>
+      <div class="path-card">
+        <span class="path-tag">Validated</span>
+        <div class="path-title">Compose · Raw</div>
+        <div class="path-desc">이미지 기반 멀티 서비스 Compose 스택. 공개 URL 200 OK 검증.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SAFETY -->
+<section id="safety">
+  <div class="section-inner">
+    <p class="section-label">Safety</p>
+    <h2 class="section-title">안전 원칙</h2>
+    <p class="section-subtitle">에이전트가 Onestack 배포 작업에서 반드시 지키는 가드레일</p>
+    <div class="safety-grid">
+      <div class="safety-card">
+        <div class="safety-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <div class="safety-text"><strong>시크릿 비노출.</strong> API 토큰, DB 비밀번호, <code>.env</code> 값, 시크릿이 포함된 명령 전체를 응답에 노출하지 않습니다.</div>
+      </div>
+      <div class="safety-card">
+        <div class="safety-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+        </div>
+        <div class="safety-text"><strong>삭제 금지(승인 전).</strong> Application, Database, Domain, Volume, Deployment는 사용자가 명시적으로 승인하기 전까지 삭제하지 않습니다.</div>
+      </div>
+      <div class="safety-card">
+        <div class="safety-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <div class="safety-text"><strong>Git 상태 점검.</strong> Onestack은 원격 소스 기준으로 배포하므로 배포 전 미커밋·미푸시 변경을 사용자에게 알립니다.</div>
+      </div>
+      <div class="safety-card">
+        <div class="safety-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 12 11 14 15 10"/><circle cx="12" cy="12" r="10"/></svg>
+        </div>
+        <div class="safety-text"><strong>구조화된 결과 파싱.</strong> 가능한 경우 JSON 응답을 사용해 상태와 결과를 안정적으로 처리합니다.</div>
+      </div>
+      <div class="safety-card">
+        <div class="safety-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+        </div>
+        <div class="safety-text"><strong>인증 위조 금지.</strong> API 키가 없으면 임의 값을 만들지 않고, 사용자에게 키 제공 또는 콘솔 생성 절차를 안내합니다.</div>
+      </div>
+      <div class="safety-card">
+        <div class="safety-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+        </div>
+        <div class="safety-text"><strong>도메인 정책.</strong> 공개 도메인은 기본 <code>*.onestack.run</code>을 사용하며, 별도 도메인을 등록할 때만 추가로 라우팅합니다.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section id="cta">
+  <div class="section-inner">
+    <h2 class="cta-title">지금 첫 프로젝트를<br>Onestack에 올려보세요</h2>
+    <p class="cta-desc">스킬 한 번 설치하면, 다음 한 줄이 곧 라이브 URL이 됩니다.</p>
+    <div class="cta-ctas">
+      <a class="btn-primary" href="https://console.onestack.run/" target="_blank" rel="noopener">
+        콘솔 열기
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </a>
+      <a class="btn-secondary" href="#install">설치 명령 복사</a>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq">
+  <div class="section-inner">
+    <p class="section-label">FAQ</p>
+    <h2 class="section-title">자주 묻는 질문</h2>
+    <div class="faq-list">
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          Onestack은 어떤 서비스인가요?
+          <div class="faq-chevron"></div>
+        </button>
+        <div class="faq-a"><div class="faq-a-inner">
+          Onestack은 로컬에서 만든 코드 프로젝트를 라이브 서비스로 만들어주는 배포 플랫폼입니다.
+          AI 에이전트와 결합해 "한 마디로 배포"가 가능하도록 설계되었습니다. 콘솔은 <code>https://console.onestack.run</code>에서 사용할 수 있습니다.
+        </div></div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          설치에 Git이 필요한가요?
+          <div class="faq-chevron"></div>
+        </button>
+        <div class="faq-a"><div class="faq-a-inner">
+          아니요. 설치 스크립트는 <code>curl</code>과 <code>tar</code>(macOS/Linux), 또는 <code>Invoke-WebRequest</code>와 <code>Expand-Archive</code>(Windows) 같은 OS 기본 명령만 사용해 GitHub에서 직접 아카이브를 받아 설치합니다.
+          Git이 설치돼 있지 않아도 동작합니다.
+        </div></div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          어떤 AI 에이전트에서 사용할 수 있나요?
+          <div class="faq-chevron"></div>
+        </button>
+        <div class="faq-a"><div class="faq-a-inner">
+          Claude Code, Cursor, Codex CLI, Gemini CLI, OpenCode 등 <code>~/.claude/skills</code> 또는 <code>.agents/skills</code>를 인식하는 에이전트라면 모두 사용할 수 있습니다.
+          설치 후 에이전트에게 "Onestack으로 배포해줘"라고 요청하면 스킬이 자동으로 활성화됩니다.
+        </div></div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          Onestack API 키는 어떻게 발급받나요?
+          <div class="faq-chevron"></div>
+        </button>
+        <div class="faq-a"><div class="faq-a-inner">
+          Onestack 콘솔(<code>https://console.onestack.run</code>)의 User Settings → API/CLI 메뉴에서 발급합니다.
+          발급한 키는 <code>export ONESTACK_API_KEY=...</code>로 환경 변수에 설정하면 에이전트가 자동으로 사용합니다.
+        </div></div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          로컬에 Docker가 없어도 배포할 수 있나요?
+          <div class="faq-chevron"></div>
+        </button>
+        <div class="faq-a"><div class="faq-a-inner">
+          네. Onestack은 ZIP Drop 업로드 경로를 지원하므로 빌드가 서버에서 일어납니다.
+          로컬에 Docker가 설치돼 있지 않아도 배포에 문제가 없습니다.
+        </div></div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          기존 docker-compose.yml은 그대로 쓸 수 있나요?
+          <div class="faq-chevron"></div>
+        </button>
+        <div class="faq-a"><div class="faq-a-inner">
+          이미지 기반의 self-contained Compose라면 Raw Compose 경로로 그대로 배포할 수 있습니다.
+          로컬 빌드 컨텍스트가 필요한 Compose는 원격 소스 접근이 가능한 경우에만 안전하게 동작합니다.
+        </div></div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          DB가 포함된 프로젝트는 어떻게 배포되나요?
+          <div class="faq-chevron"></div>
+        </button>
+        <div class="faq-a"><div class="faq-a-inner">
+          앱은 Application 리소스로, DB는 Onestack 관리형 서비스(Postgres / MySQL 등)로 분리해
+          내부 서비스 호스트네임으로 연결합니다. <code>docker-compose</code>에 DB를 묶지 않는 것이 기본입니다.
+        </div></div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          기본 도메인은 무엇인가요?
+          <div class="faq-chevron"></div>
+        </button>
+        <div class="faq-a"><div class="faq-a-inner">
+          기본 공개 도메인은 <code>&lt;app-slug&gt;.onestack.run</code>이며 Traefik이 자동 라우팅합니다.
+          별도 도메인을 사용하려면 콘솔이나 에이전트 요청으로 추가 등록하면 됩니다.
+        </div></div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          배포가 끝났는데 502가 떠요. 실패한 건가요?
+          <div class="faq-chevron"></div>
+        </button>
+        <div class="faq-a"><div class="faq-a-inner">
+          리소스 상태가 <code>done</code>인 직후에는 Traefik 반영 지연으로 일시적 502가 발생할 수 있습니다.
+          에이전트는 짧은 retry 윈도우 동안 재확인한 뒤에만 실패로 보고합니다. 직접 확인이 필요하면 잠시 후 다시 접속해 보세요.
+        </div></div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-brand">Onestack</div>
+  <div class="footer-sub">AI 네이티브 배포 플랫폼</div>
+  <div class="footer-links">
+    <a href="https://console.onestack.run/" target="_blank" rel="noopener">Console</a>
+    <a href="https://github.com/gabia/onestack.skill" target="_blank" rel="noopener">GitHub</a>
+    <a href="#install">Install</a>
+  </div>
+</footer>
+
+<script>
+function copyCmd(btn, text) {
+  var ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0;';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); } catch(e) {}
+  document.body.removeChild(ta);
+  btn.classList.add('copied');
+  setTimeout(function(){ btn.classList.remove('copied'); }, 1500);
+}
+
+function toggleFaq(btn) {
+  var item = btn.closest('.faq-item');
+  var wasOpen = item.classList.contains('open');
+  document.querySelectorAll('.faq-item.open').forEach(function(el) { el.classList.remove('open'); });
+  if (!wasOpen) item.classList.add('open');
+}
+
+var io = new IntersectionObserver(function(entries) {
+  entries.forEach(function(entry) {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+      io.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.12 });
+document.querySelectorAll('.reveal-stagger').forEach(function(el) { io.observe(el); });
+
+var navTabs = document.querySelectorAll('.nav-tab');
+var sectionIds = Array.from(navTabs).map(function(t) { return t.getAttribute('href').slice(1); });
+function updateNav() {
+  var y = window.scrollY + window.innerHeight * 0.3;
+  var active = sectionIds[0];
+  sectionIds.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el && el.offsetTop <= y) active = id;
+  });
+  navTabs.forEach(function(t) {
+    t.classList.toggle('is-active', t.getAttribute('href') === '#' + active);
+  });
+}
+window.addEventListener('scroll', updateNav, { passive: true });
+updateNav();
+</script>
+</body>
+</html>
